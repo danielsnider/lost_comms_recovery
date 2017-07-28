@@ -25,9 +25,6 @@ def ping_host(host):
 
 class RecorveryController():
   def __init__(self):
-    self.ip = None
-    self.arm_control_method = 'super_simple_arm_teleop'
-    self.connected_to_move_base = False
     # By default recover to a pose at the origin of the frame
     self.recovery_pose = PoseWithCovarianceStamped()
     self.recovery_pose.pose.pose.position.x = 0.0
@@ -38,10 +35,10 @@ class RecorveryController():
     self.recovery_pose.pose.pose.orientation.z = 0.0
     self.recovery_pose.pose.pose.orientation.w = 1
 
-    rospy.Subscriber(rospy.get_param('~recovery_pose', 'recovery_pose'), PoseWithCovarianceStamped, self.recovery_pose_callback)
-    self.drive_publisher = rospy.Publisher('cmd_vel', Twist, queue_size=10)
-    if self.arm_control_method == 'super_simple_arm_teleop':
-      self.arm_publisher = rospy.Publisher('joy_arm', Joy, queue_size=10)
+    rospy.Subscriber('recovery_pose', PoseWithCovarianceStamped,
+                     self.recovery_pose_callback)
+    self.twist_publisher = rospy.Publisher('cmd_vel', Twist, queue_size=10)
+    self.joy_publisher = rospy.Publisher('joy', Joy, queue_size=10)
 
   def recovery_pose_callback(self, data):
     rospy.loginfo("Not connected to move_base.")
@@ -49,26 +46,24 @@ class RecorveryController():
 
   def working_comms(self):
     working_comms = False
-    for ip in self.ip.split(','):
+    for ip in self.ips.split(','):
       (output, error, returncode) = ping_host(ip)
       if returncode == 0:
         working_comms = True
     return working_comms
 
-  def stop_arm_motors(self):
-    rospy.logerr('Stopping arm motors.')
-    if self.arm_control_method == 'super_simple_arm_teleop':
-      arm_joy = Joy()
-      arm_joy.axes = [0] * 25 # Set axes to an array of zeros. Needed because
-      # the default value here is an empty list which won't zero anything but
-      # will cause likely errors without this.
-      arm_joy.buttons = [0] * 25 # Set buttons to an array of zeros
-      self.arm_publisher.publish(arm_joy)
+  def zero_joystick(self):
+    rospy.loginfo('Zeroing joystick.')
+    joy = Joy()
+    joy.axes = [0] * 25 # Set axes to an array of zeros. Needed because
+      # the default value here is an empty list which won't zero anything
+    joy.buttons = [0] * 25 # Set buttons to an array of zeros
+    self.joy_publisher.publish(joy)
 
-  def stop_drive_motors(self):
-    rospy.logerr('Stopping drive motors.')
+  def stop_motors(self):
+    rospy.loginfo('Stopping motors.')
     twist = Twist() # zero motion
-    self.drive_publisher.publish(twist)
+    self.twist_publisher.publish(twist)
 
   def connect_to_move_base(self):
     self.move_base = actionlib.SimpleActionClient('move_base', MoveBaseAction)
@@ -87,7 +82,6 @@ class RecorveryController():
     goal.target_pose.header.frame_id = rospy.get_param('~goal_frame_id', 'map')
     rospy.loginfo('Executing move_base goal to position (x,y) %s, %s.' %
             (goal.target_pose.pose.position.x, goal.target_pose.pose.position.y))
-    rospy.loginfo("To cancel the goal: 'rostopic pub -1 /move_base/cancel actionlib_msgs/GoalID -- {}'")
 
     # Send goal
     self.move_base.send_goal(goal)
@@ -119,35 +113,28 @@ class RecorveryController():
 
   def do_recovery(self):
     if rospy.is_shutdown(): return
-    rospy.logerr('No connection to basestation.')
-    self.stop_arm_motors()
-    if rospy.get_param('~recovery_behaviour','stop_motors') == 'go_home' and self.connect_to_move_base():
+    rospy.logerr('No connection to base station.')
+    if self.connect_to_move_base():
       if self.goal_in_progress():
         rospy.loginfo("Navigation in progress, not recovering until finished...")
         return
       self.navigation_goal_to(self.recovery_pose)
     else:
-      self.stop_drive_motors()
+      self.zero_joystick()
+      self.stop_motors()
 
   def main_loop(self):
-    rospy.loginfo('Monitoring basestation on IP: %s.' % self.ip)
     while not rospy.is_shutdown():
       if not self.working_comms():
         self.do_recovery()
       else:
-        rospy.loginfo('Connected to basestation.')
-      time.sleep(1)
+        rospy.loginfo('Connected to base station.')
+      time.sleep(3)
 
-def on_shutdown():
-  rospy.loginfo("Node was stopped. Exiting...")
-  sys.exit(1)
 
 def main():
   rospy.init_node("lost_comms_recovery")
-  # rospy.on_shutdown(on_shutdown)
-
-  ROS_MASTER_IP = rospy.get_master().target._ServerProxy__transport._connection[0].split(':')[0]
-
   Controller = RecorveryController()
-  Controller.ip = rospy.get_param('~ips_to_monitor', ROS_MASTER_IP)
-  Controller.main_loop()
+  Controller.ips = rospy.get_param('~ips_to_monitor')
+  rospy.loginfo('Monitoring base station on IP(s): %s.' % Controller.ips)
+  Controller.main_loop() # start monitoring

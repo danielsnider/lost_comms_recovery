@@ -2,7 +2,7 @@
   <name>lost_comms_recovery</name>
   <version>0.1.0</version>
   <description>
-      If pings to the ROS_MASTER fail, stop all motors and navigate home if move_base is running idle.
+      If your robot loses connection to the base station it will stop motors or navigate home.
   </description>
   <maintainer email="danielsnider12@gmail.com">Daniel Snider</maintainer>
   <author email="danielsnider12@gmail.com">Daniel Snider</author>
