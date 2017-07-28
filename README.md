@@ -2,8 +2,6 @@
 
 If your robot loses connection to the base station it will navigate to a configurable home.
 
-Full documentation on wiki: [http://wiki.ros.org/lost_comms_recovery](http://wiki.ros.org/lost_comms_recovery)
-
 ## Quick Start
 
 1. Install:
