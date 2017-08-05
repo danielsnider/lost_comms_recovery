@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-import lost_comms_recovery
+from lost_comms_recovery import lost_comms_recovery
 
 if __name__ == '__main__':
     lost_comms_recovery.main()
